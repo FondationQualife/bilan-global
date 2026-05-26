@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bilan Global — Roue interactive</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #ffffff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #2c2c2c;
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 24px;
+    }
+
+    .wheel-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      width: 560px;
+      height: 560px;
+    }
+
+    .sector { cursor: pointer; }
+    .sector-shape {
+      transition: transform .18s ease, filter .18s ease;
+      transform-origin: center center;
+    }
+    .sector:hover .sector-shape {
+      transform: scale(1.06);
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.15));
+    }
+
+    .sub-bubble {
+      position: absolute;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 5px 13px;
+      white-space: nowrap;
+      border: 1.5px solid;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease, transform .2s ease;
+      transform: translate(-50%, -50%) scale(0.85);
+      cursor: pointer;
+      text-decoration: none;
+      display: block;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .sub-bubble.visible {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+      pointer-events: auto;
+    }
+    .sub-bubble:hover {
+      filter: brightness(0.93);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+    }
+
+    .hint {
+      margin-top: 16px;
+      font-size: 11px;
+      color: #aaa;
+      text-align: center;
+    }
+
+    /* =============================================
+       URLS À REMPLACER
+       Chercher "https://votre-sharepoint.com/pages/"
+       et remplacer chaque URL par la vraie page SharePoint
+       ============================================= */
+  </style>
+</head>
+<body>
+
+  <h1>Bilan Global</h1>
+  <p class="subtitle">Survolez un domaine · Cliquez sur une sous-catégorie pour ouvrir la page</p>
+
+  <div class="wheel-wrap" id="wrap">
+    <svg id="wheel" width="520" height="520" viewBox="-260 -260 520 520" style="overflow:visible"></svg>
+  </div>
+
+  <p class="hint">Survolez un domaine pour voir ses sous-catégories · Cliquez sur un domaine ou une bulle pour ouvrir la page SharePoint</p>
+
+  <script>
+    const GAP = 0.032;
+    const R   = 190;  // rayon extérieur
+    const RI  =  62;  // rayon intérieur (trou central)
+
+    // ============================================================
+    // DONNÉES — modifier labels, couleurs et URLs ici
+    // ============================================================
+    const domains = [
+      {
+        label: "Admin &\nfinances",
+        url: "https://votre-sharepoint.com/pages/admin-finances",
+        light: "#F9E0EE", border: "#C4307A", text: "#7A0A45",
+        subs: [
+          { name: "Moyens de subsistance", url: "https://votre-sharepoint.com/pages/moyens-de-subsistance" },
+          { name: "Dettes",                url: "https://votre-sharepoint.com/pages/dettes" },
+          { name: "Permis de séjour",      url: "https://votre-sharepoint.com/pages/permis-de-sejour" },
+          { name: "Justice",               url: "https://votre-sharepoint.com/pages/justice" },
+        ]
+      },
+      {
+        label: "Santé",
+        url: "https://votre-sharepoint.com/pages/sante",
+        light: "#F5E8F8", border: "#C472D4", text: "#6B1478",
+        subs: [
+          { name: "Physique",              url: "https://votre-sharepoint.com/pages/sante-physique" },
+          { name: "Mentale",               url: "https://votre-sharepoint.com/pages/sante-mentale" },
+          { name: "Énergie",               url: "https://votre-sharepoint.com/pages/energie" },
+          { name: "Addictions",            url: "https://votre-sharepoint.com/pages/addictions" },
+          { name: "Rythme de vie",         url: "https://votre-sharepoint.com/pages/rythme-vie" },
+          { name: "Assurance invalidité",  url: "https://votre-sharepoint.com/pages/assurance-invalidite" },
+          { name: "Troubles dys",          url: "https://votre-sharepoint.com/pages/troubles-dys" },
+          { name: "Sommeil",               url: "https://votre-sharepoint.com/pages/sommeil" },
+          { name: "TDA-H / TSA",           url: "https://votre-sharepoint.com/pages/tdah-tsa" },
+        ]
+      },
+      {
+        label: "Conditions\nde vie",
+        url: "https://votre-sharepoint.com/pages/conditions-de-vie",
+        light: "#FDE8F2", border: "#D966A8", text: "#7A1459",
+        subs: [
+          { name: "Logement",               url: "https://votre-sharepoint.com/pages/logement" },
+          { name: "Ressources matérielles", url: "https://votre-sharepoint.com/pages/ressources-materielles" },
+          { name: "Mobilité / Transports",  url: "https://votre-sharepoint.com/pages/mobilite-transports" },
+        ]
+      },
+      {
+        label: "Contexte\nfamilial",
+        url: "https://votre-sharepoint.com/pages/contexte-familial",
+        light: "#E8F5EE", border: "#5DB88A", text: "#1A5E3A",
+        subs: [
+          { name: "Histoire de vie",   url: "https://votre-sharepoint.com/pages/histoire-de-vie" },
+          { name: "Migration",         url: "https://votre-sharepoint.com/pages/migration" },
+          { name: "Santé d'un proche", url: "https://votre-sharepoint.com/pages/sante-proche" },
+          { name: "Garde d'enfant",    url: "https://votre-sharepoint.com/pages/garde-enfant" },
+          { name: "Rôle de parent",    url: "https://votre-sharepoint.com/pages/role-parent" },
+        ]
+      },
+      {
+        label: "Scolaire",
+        url: "https://votre-sharepoint.com/pages/scolaire",
+        light: "#FEECEC", border: "#E04444", text: "#7A0E0E",
+        subs: [
+          { name: "Compétences scolaires", url: "https://votre-sharepoint.com/pages/competences-scolaires" },
+          { name: "Vécu scolaire",         url: "https://votre-sharepoint.com/pages/vecu-scolaire" },
+          { name: "Outils numériques",     url: "https://votre-sharepoint.com/pages/outils-numeriques" },
+        ]
+      },
+      {
+        label: "Construction\nde soi",
+        url: "https://votre-sharepoint.com/pages/construction-de-soi",
+        light: "#FEF3E8", border: "#F08030", text: "#7A3508",
+        subs: [
+          { name: "Confiance / Estime de soi", url: "https://votre-sharepoint.com/pages/estime-de-soi" },
+          { name: "Connaissance de soi",       url: "https://votre-sharepoint.com/pages/connaissance-soi" },
+          { name: "Spiritualité / Croyances",  url: "https://votre-sharepoint.com/pages/spiritualite" },
+          { name: "Citoyenneté",               url: "https://votre-sharepoint.com/pages/citoyennete" },
+          { name: "Rapport aux autres",        url: "https://votre-sharepoint.com/pages/rapport-aux-autres" },
+        ]
+      },
+      {
+        label: "Vie\nsociale",
+        url: "https://votre-sharepoint.com/pages/vie-sociale",
+        light: "#FFFBE6", border: "#F0C419", text: "#6B4E00",
+        subs: [
+          { name: "Amis",    url: "https://votre-sharepoint.com/pages/amis" },
+          { name: "Loisirs", url: "https://votre-sharepoint.com/pages/loisirs" },
+        ]
+      },
+      {
+        label: "Projet\npro",
+        url: "https://votre-sharepoint.com/pages/projet-pro",
+        light: "#EAF2FD", border: "#4A90D9", text: "#0D3A6E",
+        subs: [
+          { name: "Orientation pro",      url: "https://votre-sharepoint.com/pages/orientation-pro" },
+          { name: "Stages / Expériences", url: "https://votre-sharepoint.com/pages/stages-experiences" },
+          { name: "Réseau pro",           url: "https://votre-sharepoint.com/pages/reseau-pro" },
+          { name: "Codes pro",            url: "https://votre-sharepoint.com/pages/codes-pro" },
+          { name: "Discriminations",      url: "https://votre-sharepoint.com/pages/discriminations" },
+        ]
+      },
+    ];
+
+    // ============================================================
+    // MOTEUR DE RENDU — ne pas modifier sauf besoin avancé
+    // ============================================================
+    const N     = domains.length;
+    const slice = 2 * Math.PI / N;
+    const svg   = document.getElementById('wheel');
+    const wrap  = document.getElementById('wrap');
+    let activeBubbles = [];
+    let activeIdx     = -1;
+
+    function polar(angle, r) {
+      return [r * Math.cos(angle), r * Math.sin(angle)];
+    }
+
+    function arcPath(startA, endA, rOuter, rInner) {
+      const [x1, y1] = polar(startA, rOuter);
+      const [x2, y2] = polar(endA,   rOuter);
+      const [x3, y3] = polar(endA,   rInner);
+      const [x4, y4] = polar(startA, rInner);
+      const largeArc  = endA - startA > Math.PI ? 1 : 0;
+      return `M${x1},${y1}A${rOuter},${rOuter},0,${largeArc},1,${x2},${y2}`
+           + `L${x3},${y3}A${rInner},${rInner},0,${largeArc},0,${x4},${y4}Z`;
+    }
+
+    function clearBubbles() {
+      activeBubbles.forEach(b => b.remove());
+      activeBubbles = [];
+      activeIdx = -1;
+    }
+
+    function showBubbles(i) {
+      if (activeIdx === i) return;
+      clearBubbles();
+      activeIdx = i;
+      const d     = domains[i];
+      const midA  = -Math.PI / 2 + i * slice + slice / 2;
+      const bR    = 235;
+      const total = d.subs.length;
+
+      d.subs.forEach((sub, j) => {
+        const spread = Math.min(0.6, 0.11 * total + 0.08);
+        const off    = (j - (total - 1) / 2) * spread;
+        const a      = midA + off;
+        const [bx, by] = polar(a, bR);
+
+        const svgRect  = svg.getBoundingClientRect();
+        const wrapRect = wrap.getBoundingClientRect();
+        const scaleX   = svgRect.width  / 520;
+        const scaleY   = svgRect.height / 520;
+        const px = svgRect.left - wrapRect.left + (bx + 260) * scaleX;
+        const py = svgRect.top  - wrapRect.top  + (by + 260) * scaleY;
+
+        const el = document.createElement('a');
+        el.className   = 'sub-bubble';
+        el.textContent = sub.name;
+        el.href        = sub.url;
+        el.target      = '_blank';
+        el.rel         = 'noopener noreferrer';
+        el.style.left        = px + 'px';
+        el.style.top         = py + 'px';
+        el.style.borderColor = d.border;
+        el.style.color       = d.text;
+        el.style.background  = d.light;
+
+        wrap.appendChild(el);
+        activeBubbles.push(el);
+        requestAnimationFrame(() => el.classList.add('visible'));
+      });
+    }
+
+    // Construire les secteurs
+    domains.forEach((d, i) => {
+      const startA = -Math.PI / 2 + i * slice + GAP / 2;
+      const endA   = -Math.PI / 2 + (i + 1) * slice - GAP / 2;
+      const midA   = (startA + endA) / 2;
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('class', 'sector');
+
+      // Secteur
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d',            arcPath(startA, endA, R, RI));
+      path.setAttribute('fill',         d.light);
+      path.setAttribute('stroke',       d.border);
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('class',        'sector-shape');
+      path.setAttribute('title',        d.label.replace('\n', ' '));
+      g.style.cursor = 'pointer';
+      g.appendChild(path);
+
+      // Label
+      const [lx, ly] = polar(midA, (R + RI) / 2 + 8);
+      const lines = d.label.split('\n');
+      const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      textEl.setAttribute('x',                  lx);
+      textEl.setAttribute('y',                  ly - (lines.length - 1) * 7);
+      textEl.setAttribute('text-anchor',        'middle');
+      textEl.setAttribute('dominant-baseline',  'central');
+      textEl.setAttribute('font-size',          '12');
+      textEl.setAttribute('font-weight',        '600');
+      textEl.setAttribute('fill',               d.text);
+      textEl.setAttribute('pointer-events',     'none');
+      lines.forEach((line, li) => {
+        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+        tspan.setAttribute('x',  lx);
+        tspan.setAttribute('dy', li === 0 ? '0' : '1.35em');
+        tspan.textContent = line;
+        textEl.appendChild(tspan);
+      });
+      g.appendChild(textEl);
+
+      // Événements
+      g.addEventListener('mouseenter', () => showBubbles(i));
+      g.addEventListener('mouseleave', () => {
+        setTimeout(() => {
+          if (!activeBubbles.some(b => b.matches(':hover'))) clearBubbles();
+        }, 140);
+      });
+      g.addEventListener('click', () => {
+        if (d.url) window.open(d.url, '_blank', 'noopener,noreferrer');
+      });
+
+      svg.appendChild(g);
+    });
+
+    wrap.addEventListener('mouseleave', clearBubbles);
+
+    // Cercle central
+    const centerCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    centerCircle.setAttribute('cx',           '0');
+    centerCircle.setAttribute('cy',           '0');
+    centerCircle.setAttribute('r',            RI - 2);
+    centerCircle.setAttribute('fill',         '#ffffff');
+    centerCircle.setAttribute('stroke',       '#e0e0e0');
+    centerCircle.setAttribute('stroke-width', '0.5');
+    svg.appendChild(centerCircle);
+
+    ['Bilan', 'global'].forEach((word, i) => {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x',                 '0');
+      t.setAttribute('y',                 i === 0 ? '-8' : '10');
+      t.setAttribute('text-anchor',       'middle');
+      t.setAttribute('dominant-baseline', 'central');
+      t.setAttribute('font-size',         '11');
+      t.setAttribute('font-weight',       '600');
+      t.setAttribute('fill',              '#888');
+      t.textContent = word;
+      svg.appendChild(t);
+    });
+  </script>
+</body>
+</html>
